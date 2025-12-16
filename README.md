@@ -26,3 +26,6 @@ A desktop application that records system audio (meetings, webinars) and uses Op
 
 ## ⚠️ Note on Privacy
 Everything runs **offline** on your CPU. No audio data is sent to the cloud.
+
+---
+*Created by [Lorenzo Bellillo]*

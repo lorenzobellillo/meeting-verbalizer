@@ -4,25 +4,47 @@ import soundfile as sf
 import threading
 import whisper
 import os
+import sys
 import datetime
 import json
 import numpy as np
 import shutil
 from fpdf import FPDF
 from pathlib import Path
+from PIL import Image 
 
 SAMPLE_RATE = 44100
 TEMP_FILENAME = "temp_recording.wav"
 CONFIG_FILE = os.path.join(str(Path.home()), ".meeting_recorder_config.json")
 
+
+def resource_path(relative_path):
+    """ Ottiene il percorso assoluto per le risorse (immagini, icone),
+        funzionante sia come script che come EXE (PyInstaller) """
+    try:
+        
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 class MeetingVerbalizerFinal(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Meeting Transcription AI (Smart Segmentation)")
+
+        self.title("Meeting Transcription AI (Professional)")
         self.geometry("950x750")
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
+        
+
+        try:
+            icon_path = resource_path("logo.ico")
+            self.iconbitmap(icon_path) 
+        except Exception as e:
+            print(f"Attenzione: Icona .ico non trovata: {e}")
 
         self.is_recording = False
         self.model = None
@@ -40,12 +62,27 @@ class MeetingVerbalizerFinal(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
+
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0)
         self.sidebar.grid(row=0, column=0, rowspan=6, sticky="nsew")
         self.sidebar.grid_rowconfigure(6, weight=1)
 
-        self.logo_label = ctk.CTkLabel(self.sidebar, text="Meeting\nAI Recorder", font=ctk.CTkFont(size=22, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
+
+        try:
+            img_path = resource_path("logo.png")
+
+            self.logo_image = ctk.CTkImage(light_image=Image.open(img_path),
+                                           dark_image=Image.open(img_path),
+                                           size=(150, 150))
+            
+
+            self.logo_label = ctk.CTkLabel(self.sidebar, text="", image=self.logo_image)
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
+            
+        except Exception as e:
+            print(f"Attenzione: Immagine logo.png non trovata. Uso testo standard. {e}")
+            self.logo_label = ctk.CTkLabel(self.sidebar, text="Meeting\nAI Recorder", font=ctk.CTkFont(size=22, weight="bold"))
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
 
         self.lbl_info = ctk.CTkLabel(self.sidebar, text="Files saved automatically to:\nDesktop/Meeting_Recordings", 
                                      text_color="gray", font=("Arial", 12), wraplength=180)
@@ -86,6 +123,7 @@ class MeetingVerbalizerFinal(ctk.CTk):
 
         if self.config.get("show_mic_warning", True):
             self.after(1000, self.check_warning_popup)
+
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -206,8 +244,6 @@ class MeetingVerbalizerFinal(ctk.CTk):
         safe_filename = "".join([c for c in meeting_name if c.isalnum() or c in (' ', '_', '-')]).rstrip()
         
         pdf_path = os.path.join(self.save_folder, f"{safe_filename}.pdf")
-        
-        
         self.generate_smart_pdf(meeting_name, segments, pdf_path)
         
         if self.chk_save_audio.get():
@@ -223,37 +259,29 @@ class MeetingVerbalizerFinal(ctk.CTk):
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=15)
         pdf.add_page()
-        
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(33, 33, 33)
         pdf.cell(0, 15, title, ln=True, align='L')
-        
         current_date = datetime.datetime.now().strftime("%B %d, %Y")
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(0, 8, f"Date: {current_date}", ln=True, align='L')
-        
         pdf.ln(5)
         pdf.set_draw_color(200, 200, 200)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.ln(10)
 
-        
         grouped_topics = []
         if segments:
             current_group = {
                 "start": segments[0]['start'],
                 "text": segments[0]['text'].strip()
             }
-            
             for i in range(1, len(segments)):
                 prev_seg = segments[i-1]
                 curr_seg = segments[i]
-                
-                
                 time_gap = curr_seg['start'] - prev_seg['end']
                 text_len = len(current_group["text"])
-                
                 if time_gap > 1.5 or text_len > 400:
                     grouped_topics.append(current_group)
                     current_group = {
@@ -262,32 +290,21 @@ class MeetingVerbalizerFinal(ctk.CTk):
                     }
                 else:
                     current_group["text"] += " " + curr_seg['text'].strip()
-            
             grouped_topics.append(current_group)
 
-        
         for topic in grouped_topics:
             start_time = str(datetime.timedelta(seconds=int(topic['start'])))
             text = topic['text']
-            
             safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-            
-            
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_text_color(52, 152, 219)
             pdf.cell(25, 6, f"[{start_time}]", 0, 0)
-            
-            
             pdf.set_font("Helvetica", "", 11)
             pdf.set_text_color(20, 20, 20)
-            
-            
             current_y = pdf.get_y()
-            current_x = pdf.get_x()
-            
-            pdf.set_xy(35, current_y) 
+            pdf.set_xy(35, current_y)
             pdf.multi_cell(0, 6, safe_text)
-            pdf.ln(4) 
+            pdf.ln(4)
 
         try:
             pdf.output(filepath)
